@@ -5,7 +5,7 @@
 </template>
 
 <script setup>
-import kakaoMap from "@/components/kakaoMap";
+import kakaoMap from "@/views/kakaoMap";
 </script>
 
 <style lang="scss" scoped>
