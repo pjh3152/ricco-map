@@ -1,11 +1,11 @@
 <template>
   <div>
-    <kakaoMap />
+    <TheGround />
   </div>
 </template>
 
 <script setup>
-import kakaoMap from "@/views/kakaoMap";
+import TheGround from "@/layouts/TheGround";
 </script>
 
 <style lang="scss" scoped>

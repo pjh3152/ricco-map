@@ -1,35 +1,34 @@
 <template>
   <div class="container-fluid">
-
-    <div class="row border">
-      <div class="col-2">
-        <div class="row">
-          <div class="col-12 text-center my-4">
-            <input type="text" ref="input" placeholder="키워드검색" autocomplete="off" @keyup.enter="search">
-          </div>
-          
-          <div class="col-12" v-for="d in placesData" :key="d.id">
-            <ListCard :data="d" @click="viewPlace(d.x, d.y)" style="cursor:pointer;"/>
-          </div>
-        </div>
-      </div>
-      <div class="col-10">
-        <div id="map"></div>
-      </div>
-    </div>
-
+    <div id="map"></div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from "vue";
+import { onMounted, watch } from "vue";
 import { getCurLocation } from "@/util/currentLocation";
-import ListCard from "@/components/ListCard";
+import { useRoute } from "vue-router";
 
-const map = ref(null);
-const input = ref(null);
-const placesData = ref(null);
-const marker = ref(null);
+var map = null;
+var markers = [];
+var curLat = 33.450701;
+var curLng = 126.570667;
+
+const route = useRoute();
+
+// 파라미터를 감시하여 변경이 감지되면 Search 라우트일 경우 실행
+// watch(() => [route.params.keyword, route.params.x], ([newKeyword, oldKeyword], [newX, oldX]) => {
+watch(() => [route.params.keyword, route.params.seconds, route.params.x, route.params.category], () => {
+  if (route.name === "Search") {
+    search();
+  }
+  if (route.name === "View") {
+    viewPlace();
+  }
+  if (route.name === "Category") {
+    viewCategory();
+  }
+})
 
 onMounted(() => {
   if (window.kakao && window.kakao.maps) {
@@ -37,7 +36,6 @@ onMounted(() => {
   } else {
     loadScript();
   }
-  input.value.focus();
 })
 
 // 지도 스크립트 생성
@@ -51,100 +49,148 @@ const loadScript = () => {
 // 지도로드
 const loadMap = async () => {
 
-  let lat = 33.450701;
-  let lng = 126.570667;
-
-  // 현재위치
+  // 현재위치 구하기
   const curLocation = await getCurLocation().catch(err => { console.log(err); });
 
   if (curLocation) {
-    lat = curLocation.latitude;
-    lng = curLocation.longitude;
+    curLat = curLocation.latitude;
+    curLng = curLocation.longitude;
   }
 
   const container = document.getElementById("map");
   const options = {
-    center: new window.kakao.maps.LatLng(lat, lng),
+    center: new window.kakao.maps.LatLng(curLat, curLng),
     level: 3,
   };
 
-  map.value = new window.kakao.maps.Map(container, options);
-}
+  map = new window.kakao.maps.Map(container, options);
 
-// 장소검색
-const search = (e) => {
+  // 지도 이동시 현재 중심좌표 변경 이벤트를 등록한다.
+  window.kakao.maps.event.addListener(map, 'dragend', () => {
 
-  const keyword = e.target.value;
+    // 지도의  레벨을 얻어옵니다
+    // var level = map.getLevel();
 
-  if (!keyword) return;
+    // 지도의 중심좌표를 얻어옵니다 
+    var latlng = map.getCenter();
 
-  // var markerPos = null;
-  // const bounds = new window.kakao.maps.LatLngBounds();
-  const places = new window.kakao.maps.services.Places();
+    if (latlng) {
+      curLat = latlng.Ma;
+      curLng = latlng.La;
 
-  places.keywordSearch(keyword, (places, status) => {
-
-    if (status == window.kakao.maps.services.Status.OK) {
-
-      placesData.value = places;
-
-      console.log(places);
-
-      // for (var i = 0; i < places.length; i++) {
-
-
-      //   markerPos = new window.kakao.maps.LatLng(places[i].y, places[i].x);
-
-      //   // 마커생성
-      //   // var marker = new window.kakao.maps.Marker({
-      //   //   position: markerPos
-      //   // });
-
-      //   // markers.push(marker);
-
-      //   // // 마커가 지도 위에 표시되도록 설정
-      //   // marker.setMap(map.value);
-
-      //   bounds.extend(markerPos);
-      // }
-
-      // 검색된 장소 위치를 기준으로 지도 범위를 재설정
-      // map.value.setBounds(bounds);
+      // 로컬저장소에 현재 중심좌표 저장
+      localStorage.setItem("curLocation", JSON.stringify(latlng));
     }
-  })
+
+    if (route.params.category) {
+      viewCategory();
+    }
+  });
 }
 
-const viewPlace = (x, y) => {
+// 키워드 검색
+const search = () => {
 
-  if (marker.value) {
-    marker.value.setMap(null);
+  const places = history.state.places;
+
+  var markerPos = null;
+  // const bounds = new window.kakao.maps.LatLngBounds();
+
+  // 기존 마커 제거
+  removeMarker();
+
+  for (var i = 0; i < places.length; i++) {
+
+    markerPos = new window.kakao.maps.LatLng(places[i].y, places[i].x);
+
+    // 마커생성
+    var marker = new window.kakao.maps.Marker({
+      position: markerPos
+    });
+
+    // 배열에 마커정보 추가
+    markers.push(marker);
+
+    // 마커가 지도 위에 표시되도록 설정
+    marker.setMap(map);
+
+    // bounds.extend(markerPos);
   }
-  marker.value = null;
+
+  // 검색된 장소 위치를 기준으로 지도 범위를 재설정
+  // map.setBounds(bounds);
+}
+
+// 장소선택
+const viewPlace = () => {
+
+  const x = history.state.x;
+  const y = history.state.y;
 
   var markerPos = new window.kakao.maps.LatLng(y, x);
 
-  // 마커생성
-  marker.value = new window.kakao.maps.Marker({
-    position: markerPos
-  });
+  // 지도레벨 설정
+  map.setLevel(3);
 
-  marker.value.setMap(map.value);
-
-  // 마커 위치로 이동
-  map.value.panTo(markerPos);
-
-  // map.value.setLevel(3);
+  // 좌표로 이동
+  map.panTo(markerPos);
 }
 
-// const removeMarker = () => {
+// 카테고리별 표시
+const viewCategory = () => {
 
-//   for (var i = 0; i < markers.length; i++) {
-//     markers[i].setMap("");
-//   }
-//   markers = [];
+  removeMarker();
 
-//   run.value += 1;
-// }
+  const places = new window.kakao.maps.services.Places();
+
+  // 검색옵션
+  const options = {
+    location: new window.kakao.maps.LatLng(curLat, curLng),
+    sort_by: "DISTANCE",
+  }
+
+  places.categorySearch(route.params.category, placesSearchCB, options);
+}
+
+const placesSearchCB = (places, status) => {
+
+  if (status === window.kakao.maps.services.Status.OK) {
+
+    var markerPos = null;
+    // const bounds = new window.kakao.maps.LatLngBounds();
+
+    for (var i = 0; i < places.length; i++) {
+
+      // 마커를 생성하고 지도에 표시합니다
+      markerPos = new window.kakao.maps.LatLng(places[i].y, places[i].x);
+
+      // 마커생성
+      var marker = new window.kakao.maps.Marker({
+        position: markerPos
+      });
+
+      // 배열에 마커정보 추가
+      markers.push(marker);
+
+      // 마커가 지도 위에 표시되도록 설정
+      marker.setMap(map);
+
+      // bounds.extend(markerPos);
+
+      // map.panTo(markerPos);
+    }
+
+    // map.setBounds(bounds);
+  }
+}
+
+// 모든 마커 제거
+const removeMarker = () => {
+  for (var i = 0; i < markers.length; i++) {
+    markers[i].setMap(null);
+  }
+  markers = [];
+}
 </script>
 
 <style lang="scss" scoped>
@@ -169,6 +215,6 @@ input::placeholder {
 
 #map {
   width: 100%;
-  height: 100vh;
+  height: 92vh;
 }
 </style>
